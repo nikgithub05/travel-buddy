@@ -19,6 +19,7 @@ trip-planner/
 ├── userdb.py           # Handles user-related operations (e.g., storing user data)
 ├── preference.py       # Handles travel preferences (Flask Blueprint)
 ├── package.json        # Project metadata and dependencies
+├── requirements.txt    # Python dependencies for Flask backend
 ```
 
 ## 🚀 Getting Started
@@ -85,7 +86,21 @@ Visit **http://localhost:3000** to use the trip-planner UI.
    - `AuthForm.jsx`: User authentication form.
    - `Dashboard.jsx`: Travel preferences form for itinerary generation.
 
+5. **requirements.txt**: Contains all necessary Python packages for the Flask backend.
+
 ## ✅ Future Improvements
 - Enhance itinerary with third-party APIs (e.g., Google Maps).
 - Add persistent user authentication and save plans.
 - Implement detailed error handling and form validation.
+
+## 📄 requirements.txt Content
+```
+Flask
+Flask-Cors
+requests
+```
+
+To install all necessary packages, run:
+```bash
+pip install -r requirements.txt
+```
