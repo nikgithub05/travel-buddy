@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+
   const [formData, setFormData] = useState({
     user_id: 1, // Static user_id for now (replace with dynamic if needed)
     destination: '',
@@ -32,20 +35,39 @@ const Dashboard = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const { destination, start_date, end_date, budget, activities, groupSize } = formData;
+    const submissionData = {
+      user_id: formData.user_id,
+      destination: formData.destination,
+      start_date: formData.start_date,
+      end_date: formData.end_date,
+      budget: formData.budget,
+      activities: formData.activities,
+      group_size: formData.groupSize, // Ensure snake_case naming
+    };
 
-    if (!destination || !start_date || !end_date || !budget || !groupSize || activities.length === 0) {
+    console.log('Submitting data:', submissionData);
+
+    if (!submissionData.destination || !submissionData.start_date || !submissionData.end_date ||
+        !submissionData.budget || !submissionData.group_size || submissionData.activities.length === 0) {
       alert('All fields are required!');
       return;
     }
 
     try {
-      const response = await axios.post('http://localhost:5000/api/generate-itinerary', formData, {
-        withCredentials: true, // Ensure cookies and headers are sent
-      });
+      const response = await axios.post(
+        'http://localhost:5000/api/generate-itinerary',
+        submissionData,
+        { withCredentials: true }
+      );
+
       alert('Itinerary generated successfully!');
-      console.log(response.data);
+      console.log('API Response:', response.data);
+
+      // Navigate to TripPlan and pass the response data
+      navigate('/TripPlan', { state: { itinerary: response.data } });
+
     } catch (error) {
+      console.error('Full error:', error);
       alert('Error: ' + (error.response?.data?.error || 'Request failed'));
     }
   };
