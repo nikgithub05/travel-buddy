@@ -34,10 +34,10 @@ def query_db(query, args=(), one=False):
         return (rv[0] if rv else None) if one else rv
 
 # Route to handle travel preferences submission
-@preference_bp.route('/api/generate-itinerary', methods=['POST', 'OPTIONS'])
+@preference_bp.route('/generate-itinerary', methods=['POST', 'OPTIONS'])
 def generate_itinerary():
     if request.method == 'OPTIONS':
-        # Handle preflight request with necessary headers
+        # Handle preflight request
         response = jsonify({"message": "CORS preflight successful"})
         response.headers.add("Access-Control-Allow-Origin", "http://localhost:3000")
         response.headers.add("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -46,25 +46,39 @@ def generate_itinerary():
         return response, 200
 
     data = request.json
+    print("Received data:", data)  # Debug the received data
 
     user_id = data.get('user_id')
     destination = data.get('destination')
     start_date = data.get('start_date')
     end_date = data.get('end_date')
     budget = data.get('budget')
-    activities = ','.join(data.get('activities', []))  # Store activities as a comma-separated string
+    activities = ','.join(data.get('activities', []))
+    
+    # Handle the group_size field properly - store as string
     group_size = data.get('group_size')
-
+    
+    # Validate fields
     if not all([user_id, destination, start_date, end_date, budget, activities, group_size]):
-        return jsonify({"error": "All fields are required!"}), 400
+        missing_fields = []
+        if not user_id: missing_fields.append('user_id')
+        if not destination: missing_fields.append('destination')
+        if not start_date: missing_fields.append('start_date')
+        if not end_date: missing_fields.append('end_date')
+        if not budget: missing_fields.append('budget')
+        if not activities: missing_fields.append('activities')
+        if not group_size: missing_fields.append('group_size')
+        
+        return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
 
     try:
+        # Insert as string values where appropriate
         query_db('''INSERT INTO preferences (user_id, destination, start_date, end_date, budget, activities, group_size)
                     VALUES (?, ?, ?, ?, ?, ?, ?)''',
-                 (user_id, destination, start_date, end_date, float(budget), activities, int(group_size)))
+                 (user_id, destination, start_date, end_date, float(budget), activities, group_size))
 
         return jsonify({"message": "Preferences saved successfully!"}), 201
 
     except Exception as e:
-        print("Error saving preferences:", e)
-        return jsonify({"error": "Failed to save preferences."}), 500
+        print("Error saving preferences:", str(e))
+        return jsonify({"error": f"Failed to save preferences: {str(e)}"}), 500
