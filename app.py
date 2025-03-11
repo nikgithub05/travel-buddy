@@ -3,6 +3,7 @@ from flask_cors import CORS
 from userdb import userdb_bp
 from preference import preference_bp
 from flask_bcrypt import Bcrypt
+from ai_service import ai_bp 
 
 app = Flask(__name__)
 
@@ -18,6 +19,7 @@ bcrypt = Bcrypt(app)
 # Registering blueprints
 app.register_blueprint(userdb_bp, url_prefix='/api')
 app.register_blueprint(preference_bp, url_prefix='/api')
+app.register_blueprint(ai_bp, url_prefix='/api') 
 
 # Ensure OPTIONS method is allowed for preflight requests
 @app.before_request
@@ -27,4 +29,3 @@ def handle_options():
 
 if __name__ == '__main__':
     app.run(debug=True, host='localhost', port=5000)
-    
