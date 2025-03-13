@@ -1,6 +1,82 @@
+// Dashboard.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import styled from 'styled-components';
+
+const DashboardContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background: linear-gradient(135deg, #6a11cb, #2575fc);
+`;
+
+const FormWrapper = styled.div`
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  padding: 3rem;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  max-width: 600px;
+  width: 100%;
+  color: #fff;
+`;
+
+const Title = styled.h2`
+  font-size: 2.5rem;
+  margin-bottom: 2rem;
+  text-align: center;
+`;
+
+const StyledLabel = styled.label`
+  display: block;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+`;
+
+const StyledInput = styled.input`
+  width: 100%;
+  padding: 0.8rem;
+  margin-top: 0.5rem;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  outline: none;
+`;
+
+const StyledSelect = styled.select`
+  ${StyledInput}
+`;
+
+const CheckboxWrapper = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+`;
+
+const CheckboxLabel = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
+const SubmitButton = styled.button`
+  width: 100%;
+  padding: 1rem;
+  margin-top: 2rem;
+  border: none;
+  border-radius: 12px;
+  font-size: 1.2rem;
+  background: #4caf50;
+  color: white;
+  cursor: pointer;
+  transition: background 0.3s;
+
+  &:hover {
+    background: #45a049;
+  }
+`;
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -42,30 +118,30 @@ const Dashboard = () => {
       end_date: formData.end_date,
       budget: formData.budget,
       activities: formData.activities,
-      group_size: formData.groupSize, // Ensure snake_case naming
+      group_size: formData.groupSize,
     };
 
-    console.log('Submitting data:', submissionData);
-
-    if (!submissionData.destination || !submissionData.start_date || !submissionData.end_date ||
-        !submissionData.budget || !submissionData.group_size || submissionData.activities.length === 0) {
+    if (
+      !submissionData.destination ||
+      !submissionData.start_date ||
+      !submissionData.end_date ||
+      !submissionData.budget ||
+      !submissionData.group_size ||
+      submissionData.activities.length === 0
+    ) {
       alert('All fields are required!');
       return;
     }
 
     try {
       const response = await axios.post(
-        'http://localhost:5000/api/generate-itinerary',
+        'http://localhost:5000/generate-ai-itinerary',
         submissionData,
         { withCredentials: true }
       );
 
       alert('Itinerary generated successfully!');
-      console.log('API Response:', response.data);
-
-      // Navigate to TripPlan and pass the response data
-      navigate('/TripPlan', { state: { itinerary: response.data } });
-
+      navigate('/tripplan', { state: { itinerary: response.data } });
     } catch (error) {
       console.error('Full error:', error);
       alert('Error: ' + (error.response?.data?.error || 'Request failed'));
@@ -73,96 +149,90 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="p-6 max-w-xl mx-auto bg-white shadow-md rounded-2xl">
-      <h2 className="text-2xl font-semibold mb-6">Travel Preferences Form</h2>
-      <form onSubmit={handleSubmit}>
-        <label className="block mb-4">
-          Destination:
-          <input
-            type="text"
-            name="destination"
-            value={formData.destination}
-            onChange={handleChange}
-            required
-            className="w-full mt-2 p-2 border rounded-lg"
-          />
-        </label>
+    <DashboardContainer>
+      <FormWrapper>
+        <Title>Travel Preferences Form</Title>
+        <form onSubmit={handleSubmit}>
+          <StyledLabel>
+            Destination:
+            <StyledInput
+              type="text"
+              name="destination"
+              value={formData.destination}
+              onChange={handleChange}
+              required
+            />
+          </StyledLabel>
 
-        <label className="block mb-4">
-          Start Date:
-          <input
-            type="date"
-            name="start_date"
-            value={formData.start_date}
-            onChange={handleChange}
-            required
-            className="w-full mt-2 p-2 border rounded-lg"
-          />
-        </label>
+          <StyledLabel>
+            Start Date:
+            <StyledInput
+              type="date"
+              name="start_date"
+              value={formData.start_date}
+              onChange={handleChange}
+              required
+            />
+          </StyledLabel>
 
-        <label className="block mb-4">
-          End Date:
-          <input
-            type="date"
-            name="end_date"
-            value={formData.end_date}
-            onChange={handleChange}
-            required
-            className="w-full mt-2 p-2 border rounded-lg"
-          />
-        </label>
+          <StyledLabel>
+            End Date:
+            <StyledInput
+              type="date"
+              name="end_date"
+              value={formData.end_date}
+              onChange={handleChange}
+              required
+            />
+          </StyledLabel>
 
-        <label className="block mb-4">
-          Budget (in INR):
-          <input
-            type="number"
-            name="budget"
-            value={formData.budget}
-            onChange={handleChange}
-            required
-            className="w-full mt-2 p-2 border rounded-lg"
-          />
-        </label>
+          <StyledLabel>
+            Budget (in INR):
+            <StyledInput
+              type="number"
+              name="budget"
+              value={formData.budget}
+              onChange={handleChange}
+              required
+            />
+          </StyledLabel>
 
-        <fieldset className="mb-4">
-          <legend className="mb-2 font-medium">Activities:</legend>
-          {activitiesOptions.map((activity) => (
-            <label key={activity} className="inline-flex items-center mr-4">
-              <input
-                type="checkbox"
-                name="activities"
-                value={activity}
-                checked={formData.activities.includes(activity)}
-                onChange={handleChange}
-                className="mr-2"
-              />
-              {activity}
-            </label>
-          ))}
-        </fieldset>
+          <StyledLabel>Activities:</StyledLabel>
+          <CheckboxWrapper>
+            {activitiesOptions.map((activity) => (
+              <CheckboxLabel key={activity}>
+                <input
+                  type="checkbox"
+                  name="activities"
+                  value={activity}
+                  checked={formData.activities.includes(activity)}
+                  onChange={handleChange}
+                />
+                {activity}
+              </CheckboxLabel>
+            ))}
+          </CheckboxWrapper>
 
-        <label className="block mb-6">
-          Group Size:
-          <select
-            name="groupSize"
-            value={formData.groupSize}
-            onChange={handleChange}
-            required
-            className="w-full mt-2 p-2 border rounded-lg"
-          >
-            <option value="">Select group size</option>
-            <option value="1">1 Person</option>
-            <option value="2">2 People</option>
-            <option value="3-5">3-5 People</option>
-            <option value="6+">6+ People</option>
-          </select>
-        </label>
+          <StyledLabel>
+            Group Size:
+            <StyledSelect
+              name="groupSize"
+              value={formData.groupSize}
+              onChange={handleChange}
+              required
+            >
+              <option value="">Select group size</option>
+              <option value="1">1 Person</option>
+              <option value="2">2 People</option>
+              <option value="3-5">3-5 People</option>
+              <option value="6+">6+ People</option>
+            </StyledSelect>
+          </StyledLabel>
 
-        <button type="submit" className="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600">
-          Submit
-        </button>
-      </form>
-    </div>
+          <SubmitButton type="submit">Submit</SubmitButton>
+        </form>
+      </FormWrapper>
+    </DashboardContainer>
   );
 };
 
