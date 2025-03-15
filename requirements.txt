@@ -1,3 +1,6 @@
 Flask
-Flask-Cors
+flask-cors
+flask-bcrypt
+firebase-admin
 requests
+schedule
