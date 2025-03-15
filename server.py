@@ -19,7 +19,7 @@ CORS(app, resources={r"/*": {
 }})
 
 # Initialize Firebase Admin SDK
-cred = credentials.Certificate(r'D:/PRATHMESH NIKAM/Downloads/VS/trip-planner/database/serviceAccountKey.json')
+cred = credentials.Certificate(r'path to your .json file') // u will need to add the path of ur firebase skd file
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
