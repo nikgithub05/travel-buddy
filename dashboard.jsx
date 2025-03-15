@@ -1,5 +1,4 @@
-// Dashboard.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import styled from 'styled-components';
@@ -10,6 +9,7 @@ const DashboardContainer = styled.div`
   align-items: center;
   height: 100vh;
   background: linear-gradient(135deg, #6a11cb, #2575fc);
+  font-family: Arial, sans-serif;
 `;
 
 const FormWrapper = styled.div`
@@ -21,6 +21,10 @@ const FormWrapper = styled.div`
   max-width: 600px;
   width: 100%;
   color: #fff;
+  transition: transform 0.3s ease-in-out;
+  &:hover {
+    transform: translateY(-10px);
+  }
 `;
 
 const Title = styled.h2`
@@ -43,6 +47,13 @@ const StyledInput = styled.input`
   border-radius: 12px;
   font-size: 1rem;
   outline: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  transition: background 0.3s ease-in-out, transform 0.3s ease-in-out;
+  &:focus {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.02);
+  }
 `;
 
 const StyledSelect = styled.select`
@@ -71,27 +82,74 @@ const SubmitButton = styled.button`
   background: #4caf50;
   color: white;
   cursor: pointer;
-  transition: background 0.3s;
-
+  transition: background 0.3s ease-in-out, transform 0.3s ease-in-out;
   &:hover {
     background: #45a049;
+    transform: scale(1.02);
   }
+`;
+
+const CurrentPreferences = styled.div`
+  margin-top: 2rem;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1rem;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  transition: opacity 0.3s ease-in-out;
+  opacity: 0;
+  animation: fadeIn 0.5s forwards;
+
+  @keyframes fadeIn {
+    to {
+      opacity: 1;
+    }
+  }
+`;
+
+const PreferenceItem = styled.p`
+  margin: 0.5rem 0;
+  font-size: 1rem;
 `;
 
 const Dashboard = () => {
   const navigate = useNavigate();
-
+  const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')));
+  const [tripPreferences, setTripPreferences] = useState({});
   const [formData, setFormData] = useState({
-    user_id: 1, // Static user_id for now (replace with dynamic if needed)
+    user_id: user ? user.user_id : 1, // Static user_id for now (replace with dynamic if needed)
     destination: '',
     start_date: '',
     end_date: '',
     budget: '',
     activities: [],
-    groupSize: '',
+    group_size: '',
   });
 
   const activitiesOptions = ['Hiking', 'Beach', 'City Tour', 'Adventure', 'Relaxation'];
+
+  useEffect(() => {
+    if (user) {
+      fetchTripPreferences(user.user_id);
+    }
+  }, [user]);
+
+  const fetchTripPreferences = async (userId) => {
+    try {
+      const response = await axios.get(`http://localhost:5000/api/trip-preferences/${userId}`);
+      setTripPreferences(response.data);
+      setFormData({
+        user_id: userId,
+        destination: response.data.destination || '',
+        start_date: response.data.start_date || '',
+        end_date: response.data.end_date || '',
+        budget: response.data.budget || '',
+        activities: response.data.activities || [],
+        group_size: response.data.group_size || '',
+      });
+    } catch (error) {
+      console.error("Error fetching trip preferences:", error);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -108,43 +166,18 @@ const Dashboard = () => {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    const submissionData = {
-      user_id: formData.user_id,
-      destination: formData.destination,
-      start_date: formData.start_date,
-      end_date: formData.end_date,
-      budget: formData.budget,
-      activities: formData.activities,
-      group_size: formData.groupSize,
-    };
-
-    if (
-      !submissionData.destination ||
-      !submissionData.start_date ||
-      !submissionData.end_date ||
-      !submissionData.budget ||
-      !submissionData.group_size ||
-      submissionData.activities.length === 0
-    ) {
-      alert('All fields are required!');
-      return;
-    }
-
+  const readySetGo = async () => {
     try {
       const response = await axios.post(
-        'http://localhost:5000/generate-ai-itinerary',
-        submissionData,
+        'http://localhost:5000/generate-itinerary',
+        formData,
         { withCredentials: true }
       );
-
-      alert('Itinerary generated successfully!');
+      alert("Preferences saved and itinerary generated successfully!");
       navigate('/tripplan', { state: { itinerary: response.data } });
     } catch (error) {
-      console.error('Full error:', error);
-      alert('Error: ' + (error.response?.data?.error || 'Request failed'));
+      console.error("Error saving preferences and generating itinerary:", error);
+      alert("Failed to save preferences and generate itinerary.");
     }
   };
 
@@ -152,7 +185,7 @@ const Dashboard = () => {
     <DashboardContainer>
       <FormWrapper>
         <Title>Travel Preferences Form</Title>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={(e) => e.preventDefault()}>
           <StyledLabel>
             Destination:
             <StyledInput
@@ -216,8 +249,8 @@ const Dashboard = () => {
           <StyledLabel>
             Group Size:
             <StyledSelect
-              name="groupSize"
-              value={formData.groupSize}
+              name="group_size"
+              value={formData.group_size}
               onChange={handleChange}
               required
             >
@@ -229,8 +262,20 @@ const Dashboard = () => {
             </StyledSelect>
           </StyledLabel>
 
-          <SubmitButton type="submit">Submit</SubmitButton>
+          <SubmitButton type="button" onClick={readySetGo}>Ready. Set. GO</SubmitButton>
         </form>
+
+        {/* {tripPreferences && Object.keys(tripPreferences).length > 0 && (
+          <CurrentPreferences>
+            <h3>Current Trip Preferences</h3>
+            <PreferenceItem><strong>Destination:</strong> {tripPreferences.destination}</PreferenceItem>
+            <PreferenceItem><strong>Start Date:</strong> {tripPreferences.start_date}</PreferenceItem>
+            <PreferenceItem><strong>End Date:</strong> {tripPreferences.end_date}</PreferenceItem>
+            <PreferenceItem><strong>Budget:</strong> {tripPreferences.budget}</PreferenceItem>
+            <PreferenceItem><strong>Activities:</strong> {tripPreferences.activities.join(', ')}</PreferenceItem>
+            <PreferenceItem><strong>Group Size:</strong> {tripPreferences.group_size}</PreferenceItem>
+          </CurrentPreferences>
+        )} */}
       </FormWrapper>
     </DashboardContainer>
   );
