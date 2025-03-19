@@ -4,11 +4,23 @@ from flask_bcrypt import Bcrypt
 import sqlite3
 from datetime import datetime
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, auth
 import os
+import requests
+import schedule
+import time
+import threading
+import logging
+import re
+import random
+import google.generativeai as genai
 
 app = Flask(__name__)
 bcrypt = Bcrypt(app)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Enable CORS for specific origin (React app) and allow credentials
 CORS(app, resources={r"/*": {
@@ -19,11 +31,15 @@ CORS(app, resources={r"/*": {
 }})
 
 # Initialize Firebase Admin SDK
-cred = credentials.Certificate(r'path to your .json file') // u will need to add the path of ur firebase skd file
+cred = credentials.Certificate(os.getenv('FIREBASE_CREDENTIALS_PATH', r'D:\PRATHMESH NIKAM\Downloads\VS\trip-planner\database\travelbuddy\travel-buddy-e2cb5-firebase-adminsdk-fbsvc-10c48a13fd.json'))
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# Initialize local database
+
+
+
+# LOCAL DATABASE I.E USER.DB FILE KA INSTERACTION START
+# Initialize local database, this for storing the data locally 
 def init_db():
     with sqlite3.connect('user.db') as conn:
         conn.execute('''CREATE TABLE IF NOT EXISTS users (
@@ -46,7 +62,14 @@ def init_db():
                         group_size TEXT NOT NULL,
                         created_at DATETIME NOT NULL,
                         FOREIGN KEY (user_id) REFERENCES users (id))''')
-    print("Database initialized.")
+        
+        # Add logs table
+        conn.execute('''CREATE TABLE IF NOT EXISTS logs (
+                        id INTEGER PRIMARY KEY,
+                        message TEXT NOT NULL,
+                        level TEXT NOT NULL,
+                        timestamp DATETIME NOT NULL)''')
+    logger.info("Database initialized.")
 
 # Call init_db when the app starts
 init_db()
@@ -65,14 +88,67 @@ def insert_user_local(username, email, phone, password, created_at):
     try:
         query_db("INSERT INTO users (username, email, phone, password, created_at) VALUES (?, ?, ?, ?, ?)",
                  (username, email, phone, password, created_at))
-        print(f"User {username} registered successfully in local DB!")
+        logger.info(f"User {username} registered successfully in local DB!")
         return True
     except sqlite3.IntegrityError as e:
-        print(f"Integrity Error: {e}")
+        logger.error(f"Integrity Error: {e}")
         return False
     except Exception as e:
-        print(f"General Error: {e}")
+        logger.error(f"General Error: {e}")
         return False
+
+# Function to check if user exists in local database
+def check_user_exists_local(email, phone):
+    try:
+        user = query_db("SELECT * FROM users WHERE email = ? OR phone = ?", (email, phone), one=True)
+        return user is not None
+    except Exception as e:
+        logger.error(f"Error checking user existence in local DB: {e}")
+        return False
+    
+# LOCAL DATABASE I.E USER.DB FILE KA INSTERACTION END
+
+
+
+
+
+# FIREBASE INTERACTION START, INITIAL STAGE START
+
+# Function to insert user data into Firebase
+def insert_user_firebase(username, email, phone, password, created_at):
+    try:
+        user_ref = db.collection('users').document(email)
+        user_ref.set({
+            'username': username,
+            'email': email,
+            'phone': phone,
+            'password': password,
+            'created_at': created_at
+        })
+        logger.info(f"User {username} registered successfully in Firebase!")
+        return True
+    except Exception as e:
+        logger.error(f"Error registering user in Firebase: {e}")
+        return False
+
+
+# Function to check if user exists in Firebase
+def check_user_exists_firebase(email, phone):
+    try:
+        users_ref = db.collection('users').where('email', '==', email).stream()
+        for doc in users_ref:
+            return True
+        
+        users_ref = db.collection('users').where('phone', '==', phone).stream()
+        for doc in users_ref:
+            return True
+        
+        return False
+    except Exception as e:
+        logger.error(f"Error checking user existence in Firebase: {e}")
+        return False
+# FIREBASE INTERACTION START, INITIAL STAGE END
+
 
 # Function to save trip preferences to local database
 def save_trip_preferences_local(user_id, destination, start_date, end_date, budget, activities, group_size):
@@ -88,10 +164,35 @@ def save_trip_preferences_local(user_id, destination, start_date, end_date, budg
             """, 
             (user_id, destination, start_date, end_date, budget, activities_str, group_size, created_at))
         
-        print(f"Trip preferences for user {user_id} saved successfully in local DB!")
+        logger.info(f"Trip preferences for user {user_id} saved successfully in local DB!")
         return True
     except Exception as e:
-        print(f"Error saving trip preferences in local DB: {e}")
+        logger.error(f"Error saving trip preferences in local DB: {e}")
+        return False
+
+# Function to save trip preferences to Firebase
+def save_trip_preferences_firebase(user_id, destination, start_date, end_date, budget, activities, group_size):
+    try:
+        # Convert activities list to a comma-separated string
+        activities_str = ",".join(activities)
+        created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        trip_prefs_ref = db.collection('trip_preferences').document(f'{user_id}_{created_at}')
+        trip_prefs_ref.set({
+            'user_id': user_id,
+            'destination': destination,
+            'start_date': start_date,
+            'end_date': end_date,
+            'budget': budget,
+            'activities': activities_str,
+            'group_size': group_size,
+            'created_at': created_at
+        })
+        
+        logger.info(f"Trip preferences for user {user_id} saved successfully in Firebase!")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving trip preferences in Firebase: {e}")
         return False
 
 # Function to get trip preferences for a user from local database
@@ -118,50 +219,8 @@ def get_trip_preferences_local(user_id):
             }
         return None
     except Exception as e:
-        print(f"Error getting trip preferences from local DB: {e}")
+        logger.error(f"Error getting trip preferences from local DB: {e}")
         return None
-
-# Function to insert user data into Firebase
-def insert_user_firebase(username, email, phone, password, created_at):
-    try:
-        user_ref = db.collection('users').document(email)
-        user_ref.set({
-            'username': username,
-            'email': email,
-            'phone': phone,
-            'password': password,
-            'created_at': created_at
-        })
-        print(f"User {username} registered successfully in Firebase!")
-        return True
-    except Exception as e:
-        print(f"Error registering user in Firebase: {e}")
-        return False
-
-# Function to save trip preferences to Firebase
-def save_trip_preferences_firebase(user_id, destination, start_date, end_date, budget, activities, group_size):
-    try:
-        # Convert activities list to a comma-separated string
-        activities_str = ",".join(activities)
-        created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        trip_prefs_ref = db.collection('trip_preferences').document(f'{user_id}_{created_at}')
-        trip_prefs_ref.set({
-            'user_id': user_id,
-            'destination': destination,
-            'start_date': start_date,
-            'end_date': end_date,
-            'budget': budget,
-            'activities': activities_str,
-            'group_size': group_size,
-            'created_at': created_at
-        })
-        
-        print(f"Trip preferences for user {user_id} saved successfully in Firebase!")
-        return True
-    except Exception as e:
-        print(f"Error saving trip preferences in Firebase: {e}")
-        return False
 
 # Function to get trip preferences for a user from Firebase
 def get_trip_preferences_firebase(user_id):
@@ -184,14 +243,170 @@ def get_trip_preferences_firebase(user_id):
             }
         return None
     except Exception as e:
-        print(f"Error getting trip preferences from Firebase: {e}")
+        logger.error(f"Error getting trip preferences from Firebase: {e}")
         return None
+
+# Function to check internet connectivity
+def is_connected():
+    try:
+        requests.get('https://www.google.com', timeout=5)
+        return True
+    except requests.ConnectionError:
+        return False
+
+# Function to sync users from local to Firebase
+def sync_users_to_firebase():
+    users = query_db("SELECT * FROM users")
+    for user in users:
+        user_id, username, email, phone, password, created_at = user
+        if not insert_user_firebase(username, email, phone, password, created_at):
+            logger.error(f"Failed to sync user {username} to Firebase")
+
+# Function to sync trip preferences from local to Firebase
+def sync_trip_preferences_to_firebase():
+    trip_prefs = query_db("SELECT * FROM trip_preferences")
+    for pref in trip_prefs:
+        id, user_id, destination, start_date, end_date, budget, activities_str, group_size, created_at = pref
+        activities = activities_str.split(",")
+        if not save_trip_preferences_firebase(user_id, destination, start_date, end_date, budget, activities, group_size):
+            logger.error(f"Failed to sync trip preferences for user {user_id} to Firebase")
+
+# Function to sync users from Firebase to local
+def sync_users_from_firebase():
+    users_ref = db.collection('users').stream()
+    for doc in users_ref:
+        data = doc.to_dict()
+        hashed_pw = bcrypt.generate_password_hash(data['password']).decode('utf-8')
+        hashed_phone = bcrypt.generate_password_hash(data['phone'].encode('utf-8')).decode('utf-8')
+        if not insert_user_local(data['username'], data['email'], hashed_phone, hashed_pw, data['created_at']):
+            logger.error(f"Failed to sync user {data['username']} from Firebase to local DB")
+
+# Function to sync trip preferences from Firebase to local
+def sync_trip_preferences_from_firebase():
+    trip_prefs_ref = db.collection('trip_preferences').stream()
+    for doc in trip_prefs_ref:
+        data = doc.to_dict()
+        activities = data['activities'].split(",")
+        if not save_trip_preferences_local(data['user_id'], data['destination'], data['start_date'], data['end_date'], data['budget'], activities, data['group_size']):
+            logger.error(f"Failed to sync trip preferences for user {data['user_id']} from Firebase to local DB")
+
+# Function to log messages to both local and Firebase
+def log_message(message, level):
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Log to local database
+    try:
+        query_db("INSERT INTO logs (message, level, timestamp) VALUES (?, ?, ?)", (message, level, timestamp))
+        logger.info(f"Log '{message}' stored in local DB.")
+    except Exception as e:
+        logger.error(f"Error storing log in local DB: {e}")
+    
+    # Log to Firebase Firestore
+    try:
+        log_ref = db.collection('logs').document(timestamp)
+        log_ref.set({
+            'message': message,
+            'level': level,
+            'timestamp': timestamp
+        })
+        logger.info(f"Log '{message}' stored in Firebase.")
+    except Exception as e:
+        logger.error(f"Error storing log in Firebase: {e}")
+
+# Function to perform full sync
+def full_sync():
+    if is_connected():
+        logger.info("Internet connection detected. Starting sync...")
+        sync_users_to_firebase()
+        sync_trip_preferences_to_firebase()
+        sync_users_from_firebase()
+        sync_trip_preferences_from_firebase()
+        logger.info("Sync completed.")
+    else:
+        logger.info("No internet connection. Skipping sync.")
+
+# Schedule the sync function to run every 5 minutes
+schedule.every(5).minutes.do(full_sync)
+
+# Background thread to run the scheduler
+def run_scheduler():
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
+# Start the scheduler in a separate thread
+scheduler_thread = threading.Thread(target=run_scheduler)
+scheduler_thread.daemon = True
+scheduler_thread.start()
+
+# Placeholder for API interaction
+def fetch_external_itinerary(destination, start_date, end_date, budget, activities, group_size):
+    # Replace with actual API call
+    # Example:
+    # response = requests.get('https://external-api.com/itinerary', params={
+    #     'destination': destination,
+    #     'start_date': start_date,
+    #     'end_date': end_date,
+    #     'budget': budget,
+    #     'activities': ','.join(activities),
+    #     'group_size': group_size
+    # })
+    # return response.json()
+    
+    # For now, return None to indicate no external API response
+    return None
+
+# Function to generate a dynamic itinerary based on user preferences
+def generate_dynamic_itinerary(destination, start_date, end_date, budget, activities, group_size):
+    # Parse dates
+    start_date = datetime.strptime(start_date, '%Y-%m-%d')
+    end_date = datetime.strptime(end_date, '%Y-%m-%d')
+    
+    # Calculate number of days
+    num_days = (end_date - start_date).days + 1
+    
+    # Define possible activities
+    possible_activities = {
+        'Hiking': f"Hike in {destination}",
+        'Beach': f"Relax at the beach in {destination}",
+        'City Tour': f"Explore the city in {destination}",
+        'Adventure': f"Try adventure activities in {destination}",
+        'Relaxation': f"Relax and unwind in {destination}"
+    }
+    
+    # Create a basic itinerary
+    itinerary = []
+    for day in range(1, num_days + 1):
+        # Randomly select activities for the day
+        day_activities = random.sample(list(possible_activities.values()), min(len(activities), 3))
+        
+        # Distribute activities throughout the day
+        morning_activity = day_activities[0] if day_activities else "Free morning"
+        afternoon_activity = day_activities[1] if len(day_activities) > 1 else "Free afternoon"
+        evening_activity = day_activities[2] if len(day_activities) > 2 else "Free evening"
+        
+        itinerary.append({
+            "day": day,
+            "morning": morning_activity,
+            "afternoon": afternoon_activity,
+            "evening": evening_activity
+        })
+    
+    return {
+        "destination": destination,
+        "start_date": start_date.strftime('%Y-%m-%d'),
+        "end_date": end_date.strftime('%Y-%m-%d'),
+        "budget": budget,
+        "group_size": group_size,
+        "activities": activities,
+        "itinerary": itinerary
+    }
 
 # Signup Route
 @app.route('/api/signup', methods=['POST'])
 def signup():
     data = request.json
-    print("Received data:", data)
+    logger.info("Received signup data: %s", data)
 
     username = data.get('username')
     email = data.get('email')
@@ -199,20 +414,46 @@ def signup():
     password = data.get('password')
 
     if not (username and email and phone and password):
-        print("Missing required fields")
+        logger.error("Missing required fields in signup data")
         return jsonify({"error": "All fields are required!"}), 400
+
+    # Validate email format
+    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        logger.error("Invalid email format in signup data")
+        return jsonify({"error": "Invalid email format!"}), 400
+
+    # Validate phone number format (simple example)
+    if not re.match(r"^\d{10}$", phone):
+        logger.error("Invalid phone number format in signup data")
+        return jsonify({"error": "Invalid phone number format!"}), 400
+
+    # Check if user already exists
+    if check_user_exists_local(email, phone) or check_user_exists_firebase(email, phone):
+        logger.error(f"User with email {email} or phone {phone} already exists")
+        return jsonify({"error": "User already exists!"}), 400
 
     hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
     hashed_phone = bcrypt.generate_password_hash(phone.encode('utf-8')).decode('utf-8')
     created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     # Insert user data into both local and Firebase databases
-    user_inserted_local = insert_user_local(username, email, hashed_phone, hashed_pw, created_at)
-    user_inserted_firebase = insert_user_firebase(username, email, hashed_phone, hashed_pw, created_at)
+    try:
+        user_inserted_local = insert_user_local(username, email, hashed_phone, hashed_pw, created_at)
+    except Exception as e:
+        logger.error(f"Error inserting user into local DB: {e}")
+        return jsonify({"error": f"Error inserting user into local DB: {str(e)}"}), 500
+
+    try:
+        user_inserted_firebase = insert_user_firebase(username, email, hashed_phone, hashed_pw, created_at)
+    except Exception as e:
+        logger.error(f"Error inserting user into Firebase: {e}")
+        return jsonify({"error": f"Error inserting user into Firebase: {str(e)}"}), 500
 
     if user_inserted_local and user_inserted_firebase:
+        log_message(f"User {username} registered successfully", "INFO")
         return jsonify({"message": "User registered successfully!", "user_registered": True}), 201
     else:
+        log_message(f"Failed to register user {username}", "ERROR")
         return jsonify({"error": "An error occurred during registration.", "user_registered": False}), 500
 
 # Login Route
@@ -226,18 +467,22 @@ def login():
     password = data.get('password')
 
     if not (email and password):
+        logger.error("Missing required fields in login data")
         return jsonify({"error": "Email and password are required!"}), 400
 
     user = query_db("SELECT * FROM users WHERE email = ?", (email,), one=True)
     if user and bcrypt.check_password_hash(user[4], password):
+        log_message(f"User {user[1]} logged in successfully", "INFO")
         return jsonify({"message": "Login successful!", "username": user[1], "user_id": user[0]}), 200
-    return jsonify({"error": "Invalid credentials!"}), 401
+    else:
+        log_message(f"Failed login attempt for email {email}", "WARNING")
+        return jsonify({"error": "Invalid credentials!"}), 401
 
 # Save Trip Preferences Route
 @app.route('/api/save-trip-preferences', methods=['POST'])
 def save_preferences():
     data = request.json
-    print("Received trip preference data:", data)
+    logger.info("Received trip preference data: %s", data)
 
     user_id = data.get('user_id')
     destination = data.get('destination')
@@ -248,6 +493,7 @@ def save_preferences():
     group_size = data.get('group_size')
 
     if not all([user_id, destination, start_date, end_date, budget, activities, group_size]):
+        logger.error("Missing required fields in trip preferences data")
         return jsonify({"error": "All fields are required!"}), 400
 
     # Save trip preferences to both local and Firebase databases
@@ -259,10 +505,12 @@ def save_preferences():
     )
 
     if saved_local and saved_firebase:
+        log_message(f"Trip preferences for user {user_id} saved successfully", "INFO")
         # Return the saved preferences
         preferences = get_trip_preferences_firebase(user_id)
         return jsonify({"message": "Preferences saved successfully!", "preferences": preferences}), 201
     else:
+        log_message(f"Failed to save trip preferences for user {user_id}", "ERROR")
         return jsonify({"error": "Failed to save preferences"}), 500
 
 # Get Trip Preferences Route
@@ -271,15 +519,17 @@ def get_preferences(user_id):
     preferences = get_trip_preferences_firebase(user_id)
     
     if preferences:
+        log_message(f"Retrieved trip preferences for user {user_id}", "INFO")
         return jsonify(preferences), 200
     else:
+        log_message(f"No trip preferences found for user {user_id}", "WARNING")
         return jsonify({"error": "No preferences found for this user"}), 404
 
-# Placeholder for Generate Itinerary Route
+# Generate Itinerary Route
 @app.route('/generate-itinerary', methods=['POST'])
 def generate_itinerary():
     data = request.json
-    print("Received itinerary data:", data)
+    logger.info("Received itinerary data: %s", data)
     
     # First, save the preferences to both local and Firebase databases
     user_id = data.get('user_id')
@@ -291,6 +541,7 @@ def generate_itinerary():
     group_size = data.get('group_size')
 
     if not all([user_id, destination, start_date, end_date, budget, activities, group_size]):
+        logger.error("Missing required fields in itinerary data")
         return jsonify({"error": "All fields are required!"}), 400
 
     # Save trip preferences to both local and Firebase databases
@@ -302,35 +553,109 @@ def generate_itinerary():
     )
 
     if not saved_local or not saved_firebase:
+        log_message(f"Failed to save trip preferences for user {user_id}", "ERROR")
         return jsonify({"error": "Failed to save preferences"}), 500
 
-    # Placeholder for itinerary generation logic
+    # Try to fetch itinerary from external API
+    external_itinerary = fetch_external_itinerary(destination, start_date, end_date, budget, activities, group_size)
+    
+    if external_itinerary:
+        return jsonify(external_itinerary), 200
+
+    # If external API fails, generate a dynamic itinerary
+    itinerary = generate_dynamic_itinerary(destination, start_date, end_date, budget, activities, group_size)
+
+    return jsonify(itinerary), 200
+
+# Forgot Password Route
+@app.route('/api/forgot-password', methods=['POST', 'OPTIONS'])
+def forgot_password():
+    if request.method == 'OPTIONS':
+        return '', 200  # Handle preflight request
+
+    data = request.json
+    logger.info("Received forgot password data: %s", data)
+
+    email = data.get('email')
+
+    if not email:
+        logger.error("Missing required fields in forgot password data")
+        return jsonify({"error": "Email is required!"}), 400
+
     try:
-        # Integrate with another API here
-        # Example: itinerary = call_another_api(data)
-        itinerary = {
-            "destination": destination,
-            "start_date": start_date,
-            "end_date": end_date,
-            "budget": budget,
-            "group_size": group_size,
-            "activities": activities,
-            "itinerary": [
-                {"day": 1, "morning": "Visit Museum", "afternoon": "Lunch at Café", "evening": "Dinner at Restaurant"},
-                {"day": 2, "morning": "Hike in Park", "afternoon": "Shopping", "evening": "Relax at Beach"}
-            ]
-        }
-        return jsonify(itinerary), 200
+        # Generate password reset link using Firebase Authentication
+        logger.info(f"Attempting to generate password reset link for {email}")
+
+        action_code_settings = auth.ActionCodeSettings(
+            url="http://localhost:3000/reset-password",
+            handle_code_in_app=False
+        )
+
+        reset_link = auth.generate_password_reset_link(
+            email,
+            action_code_settings=action_code_settings
+        )
+        logger.info(f"Password reset link generated for {email}: {reset_link}")
+
+        # Send the reset link via email (you can use an email service like SMTP, SendGrid, etc.)
+        # For demonstration, we'll just log the link
+        logger.info(f"Sending password reset link to {email}: {reset_link}")
+
+        # You can use an email service to send the link to the user
+        # Example using SMTP (you need to configure SMTP settings)
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+
+        sender_email = "your-email@example.com"  # Your email address
+        receiver_email = email
+        password = "your-email-password"  # Your email password or app-specific password
+
+        message = MIMEMultipart("alternative")
+        message["Subject"] = "Password Reset Request"
+        message["From"] = sender_email
+        message["To"] = receiver_email
+
+        # Create the plain-text and HTML version of your message
+        text = f"""
+        Hi,
+        You requested to reset your password. Click the link below to reset your password:
+        {reset_link}
+        """
+        html = f"""
+        <html>
+          <body>
+            <p>Hi,<br>
+               You requested to reset your password. Click the link below to reset your password:<br>
+               <a href="{reset_link}">Reset Password</a>
+            </p>
+          </body>
+        </html>
+        """
+
+        # Turn these into plain/html MIMEText objects
+        part1 = MIMEText(text, "plain")
+        part2 = MIMEText(html, "html")
+
+        # Add HTML/plain-text parts to MIMEMultipart message
+        message.attach(part1)
+        message.attach(part2)
+
+        # Create secure connection with server and send email
+        context = smtplib.SMTP_SSL("smtp.example.com", 465)  # Update this to your SMTP server
+        context.login(sender_email, password)
+        context.sendmail(sender_email, receiver_email, message.as_string())
+        context.quit()
+
+        logger.info(f"Password reset email sent to {email}")
+        return jsonify({"message": "Password reset email sent successfully!"}), 200
+    except auth.EmailNotFoundError:
+        logger.error(f"Email {email} not found in Firebase Authentication")
+        return jsonify({"error": "Email not found!"}), 404
     except Exception as e:
-        print(f"API Error: {e}")
-        # Even though the API generation failed, we still return the saved preferences
-        # with a partial success status
-        preferences = get_trip_preferences_firebase(user_id)
-        return jsonify({
-            "error": str(e),
-            "message": "Preferences saved, but itinerary generation failed.",
-            "preferences": preferences
-        }), 207  # 207 Multi-Status
+        logger.error(f"Error sending password reset email: {e}")
+        return jsonify({"error": "Failed to send password reset email."}), 500
+
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)
