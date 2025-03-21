@@ -10,15 +10,15 @@ trip-planner/
 ├── public/                        # Static assets (React)
 │   └── index.html                 # Main HTML template for React
 └── src/                           # React components
-    ├── components/                # React UI components
-    │     ├── AuthForm.jsx         # User authentication form (e.g., login/signup)
-    │     ├── dashboard.jsx        # Main dashboard with travel preference form
-    │	  ├── TripPlan.jsx
-          └── firebaseConfig.js
-    ├── App.js                     # Main React component
-    └── index.js                   # React entry point
+│   ├── components/                # React UI components
+│   │     ├── AuthForm.jsx         # User authentication form (e.g., login/signup)
+│   │     ├── dashboard.jsx        # Main dashboard with travel preference form
+│   │	  ├── TripPlan.jsx
+│   │     └── firebaseConfig.js
+│   ├── App.js                     # Main React component
+│   └── index.js                   # React entry point
 ├── database                       # store ur .json file here
-     └── serviceAccountKey.json
+│    └── serviceAccountKey.json
 ├── app.py
 ├── app.js                         # JS version of app.py
 ├── userdb.py                      # python script for local database
