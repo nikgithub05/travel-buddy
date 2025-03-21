@@ -13,8 +13,12 @@ trip-planner/
 │   ├── components/                # React UI components
 │   │     ├── AuthForm.jsx         # User authentication form (e.g., login/signup)
 │   │     ├── dashboard.jsx        # Main dashboard with travel preference form
-│   │	  ├── TripPlan.jsx
+│   │	    ├── TripPlan.jsx
 │   │     └── firebaseConfig.js
+│   ├── CSS                        # CSS file
+│        ├── AuthForm.css
+│        ├── dashboard.css
+│        └── TripPlan.css
 │   ├── App.js                     # Main React component
 │   └── index.js                   # React entry point
 ├── database                       # store ur .json file here
