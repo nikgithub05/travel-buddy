@@ -30,7 +30,7 @@ CORS(app, resources={r"/*": {
 }})
 
 # Initialize Firebase Admin SDK
-cred = credentials.Certificate(os.getenv('FIREBASE_CREDENTIALS_PATH', r'D:\PRATHMESH NIKAM\Downloads\VS\trip-planner\database\travelbuddy\travel-buddy-e2cb5-firebase-adminsdk-fbsvc-10c48a13fd.json'))
+cred = credentials.Certificate(os.getenv('FIREBASE_CREDENTIALS_PATH', r"D:\PRATHMESH NIKAM\Downloads\VS\trip-planner\database\serviceAccountKey.json"))
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
@@ -381,23 +381,6 @@ scheduler_thread = threading.Thread(target=run_scheduler)
 scheduler_thread.daemon = True
 scheduler_thread.start()
 
-# Placeholder for API interaction
-def fetch_external_itinerary(destination, start_date, end_date, budget, activities, group_size):
-    # Replace with actual API call
-    # Example:
-    # response = requests.get('https://external-api.com/itinerary', params={
-    #     'destination': destination,
-    #     'start_date': start_date,
-    #     'end_date': end_date,
-    #     'budget': budget,
-    #     'activities': ','.join(activities),
-    #     'group_size': group_size
-    # })
-    # return response.json()
-    
-    # For now, return None to indicate no external API response
-    return None
-
 # Function to generate a dynamic itinerary based on user preferences
 def generate_dynamic_itinerary(destination, start_date, end_date, budget, activities, group_size):
     # Parse dates
@@ -650,7 +633,7 @@ def forgot_password():
         )
 
         auth.send_password_reset_email(email, action_code_settings)
-        logger.info(f"Password reset email sent to {email}")
+        logger.info(f"Password  reset email sent to {email}")
 
         return jsonify({"message": "Password reset email sent successfully!"}), 200
     except auth.EmailNotFoundError:
